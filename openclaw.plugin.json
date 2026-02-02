@@ -1,17 +1,29 @@
 {
-  "id": "memory-lancedb",
+  "id": "memory-lancedb-local",
   "kind": "memory",
+  "name": "Memory (LanceDB Local)",
+  "description": "LanceDB-backed long-term memory plugin with local/OpenAI embeddings + auto-recall/capture",
   "uiHints": {
+    "embedding.provider": {
+      "label": "Embedding Provider",
+      "help": "Select where embeddings come from (local GGUF or OpenAI)."
+    },
     "embedding.apiKey": {
       "label": "OpenAI API Key",
       "sensitive": true,
       "placeholder": "sk-proj-...",
-      "help": "API key for OpenAI embeddings (or use ${OPENAI_API_KEY})"
+      "help": "Required when provider=openai. You can also use ${OPENAI_API_KEY}."
     },
     "embedding.model": {
       "label": "Embedding Model",
-      "placeholder": "text-embedding-3-small",
-      "help": "OpenAI embedding model to use"
+      "placeholder": "text-embedding-3-small (openai) | bge-base-en-v1.5-q4_k_m.gguf (local)",
+      "help": "Model name for embeddings. For local, you can use a GGUF filename."
+    },
+    "embedding.modelPath": {
+      "label": "Local Model Path",
+      "placeholder": "~/.openclaw/models/embeddings/bge-base-en-v1.5-q4_k_m.gguf",
+      "help": "Path to the GGUF file (used when provider=local).",
+      "advanced": true
     },
     "dbPath": {
       "label": "Database Path",
@@ -20,11 +32,11 @@
     },
     "autoCapture": {
       "label": "Auto-Capture",
-      "help": "Automatically capture important information from conversations"
+      "help": "Automatically capture important information from conversations (PII-safe)."
     },
     "autoRecall": {
       "label": "Auto-Recall",
-      "help": "Automatically inject relevant memories into context"
+      "help": "Automatically inject relevant memories into context."
     }
   },
   "configSchema": {
@@ -35,26 +47,39 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "apiKey": {
-            "type": "string"
-          },
-          "model": {
+          "provider": {
             "type": "string",
-            "enum": ["text-embedding-3-small", "text-embedding-3-large"]
+            "enum": ["openai", "local"],
+            "default": "openai"
+          },
+          "apiKey": { "type": "string" },
+          "model": { "type": "string" },
+          "modelPath": { "type": "string" }
+        }
+      },
+      "dbPath": { "type": "string" },
+      "autoCapture": { "type": "boolean" },
+      "autoRecall": { "type": "boolean" }
+    },
+    "required": ["embedding"],
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "embedding": {
+              "properties": { "provider": { "const": "local" } }
+            }
           }
         },
-        "required": ["apiKey"]
-      },
-      "dbPath": {
-        "type": "string"
-      },
-      "autoCapture": {
-        "type": "boolean"
-      },
-      "autoRecall": {
-        "type": "boolean"
+        "then": {},
+        "else": {
+          "properties": {
+            "embedding": {
+              "required": ["apiKey"]
+            }
+          }
+        }
       }
-    },
-    "required": ["embedding"]
+    ]
   }
 }

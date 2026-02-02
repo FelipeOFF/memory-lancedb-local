@@ -251,9 +251,9 @@ function detectCategory(text: string): MemoryCategory {
 // ============================================================================
 
 const memoryPlugin = {
-  id: "memory-lancedb",
-  name: "Memory (LanceDB)",
-  description: "LanceDB-backed long-term memory with auto-recall/capture",
+  id: "memory-lancedb-local",
+  name: "Memory (LanceDB Local)",
+  description: "LanceDB-backed long-term memory with local/OpenAI embeddings + auto-recall/capture",
   kind: "memory" as const,
   configSchema: memoryConfigSchema,
 
@@ -266,28 +266,16 @@ const memoryPlugin = {
     let embeddings: EmbeddingProvider;
 
     if (cfg.embedding.provider === "local") {
-        const modelPath = cfg.embedding.modelPath 
-            ? api.resolvePath(cfg.embedding.modelPath)
-            : path.join(process.cwd(), "models", cfg.embedding.model!); // Default location?
-        
-        // If they provided a raw filename as modelPath or model, try to resolve it relative to some models dir or absolute
-        // But for now, let's assume if it's not absolute, we might need logic. 
-        // Simpler: assume modelPath is what we use.
-
-        // If modelPath is not set, use model name and assume it's a file in ./models or similar? 
-        // The instruction said "Use the existing 'bge-base-en-v1.5-q4_k_m.gguf' model path as default for local."
-        // That implies it might be a relative path.
-
-        // Let's use the explicit modelPath if provided, otherwise assume the model name IS the filename and look for it.
-        const finalModelPath = cfg.embedding.modelPath || cfg.embedding.model!; 
-        
-        // We can just pass it through api.resolvePath to be safe if it's relative to workspace
+        // Prefer explicit modelPath. If omitted, assume a conventional location.
+        // NOTE: OpenClaw resolves `~` and workspace-relative paths via api.resolvePath.
+        const defaultLocalPath = `~/.openclaw/models/embeddings/${cfg.embedding.model!}`;
+        const finalModelPath = cfg.embedding.modelPath || defaultLocalPath;
         embeddings = new LocalEmbeddings(api.resolvePath(finalModelPath));
     } else {
         embeddings = new OpenAIEmbeddings(cfg.embedding.apiKey!, cfg.embedding.model!);
     }
 
-    api.logger.info(`memory-lancedb: plugin registered (db: ${resolvedDbPath}, lazy init)`);
+    api.logger.info(`memory-lancedb-local: plugin registered (db: ${resolvedDbPath}, lazy init)`);
 
     // ========================================================================
     // Tools
