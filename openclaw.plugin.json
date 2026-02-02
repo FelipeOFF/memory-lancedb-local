@@ -50,7 +50,7 @@
           "provider": {
             "type": "string",
             "enum": ["openai", "local"],
-            "default": "openai"
+            "default": "local"
           },
           "apiKey": { "type": "string" },
           "model": { "type": "string" },
@@ -61,18 +61,16 @@
       "autoCapture": { "type": "boolean" },
       "autoRecall": { "type": "boolean" }
     },
-    "required": ["embedding"],
     "allOf": [
       {
         "if": {
           "properties": {
             "embedding": {
-              "properties": { "provider": { "const": "local" } }
+              "properties": { "provider": { "const": "openai" } }
             }
           }
         },
-        "then": {},
-        "else": {
+        "then": {
           "properties": {
             "embedding": {
               "required": ["apiKey"]

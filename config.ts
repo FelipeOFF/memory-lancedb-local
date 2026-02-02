@@ -83,30 +83,34 @@ function resolveEmbeddingModel(embedding: Record<string, unknown>): string {
 
 export const memoryConfigSchema = {
   parse(value: unknown): MemoryConfig {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new Error("memory config required");
-    }
-    const cfg = value as Record<string, unknown>;
+    // Allow empty/undefined config so the plugin can be installed/enabled without
+    // immediately forcing the user to edit config. We default to local embeddings.
+    const cfg = (value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : ({} as Record<string, unknown>));
+
     assertAllowedKeys(cfg, ["embedding", "dbPath", "autoCapture", "autoRecall"], "memory config");
 
-    const embedding = cfg.embedding as Record<string, unknown> | undefined;
-    if (!embedding) {
-      throw new Error("embedding config is required");
-    }
+    const embedding = (cfg.embedding && typeof cfg.embedding === "object" && !Array.isArray(cfg.embedding)
+      ? (cfg.embedding as Record<string, unknown>)
+      : ({} as Record<string, unknown>));
+
     assertAllowedKeys(embedding, ["provider", "apiKey", "model", "modelPath"], "embedding config");
 
-    const provider = (embedding.provider as string) === "local" ? "local" : "openai";
+    // Default to local, since it requires no API key.
+    const provider = (embedding.provider as string) === "openai" ? "openai" : "local";
 
     if (provider === "openai" && typeof embedding.apiKey !== "string") {
       throw new Error("embedding.apiKey is required for openai provider");
     }
 
-    let model = typeof embedding.model === "string" ? embedding.model : DEFAULT_MODEL;
-    if (provider === "local") {
-        model = typeof embedding.model === "string" ? embedding.model : DEFAULT_LOCAL_MODEL;
-    }
-    
-    // Validate model dimensions if known, otherwise warn or default?
+    const model =
+      typeof embedding.model === "string"
+        ? embedding.model
+        : provider === "local"
+          ? DEFAULT_LOCAL_MODEL
+          : DEFAULT_MODEL;
+
     // For now, we only support known models in EMBEDDING_DIMENSIONS to ensure DB consistency.
     vectorDimsForModel(model);
 
@@ -126,7 +130,7 @@ export const memoryConfigSchema = {
     "embedding.provider": {
         label: "Provider",
         options: ["openai", "local"],
-        default: "openai",
+        default: "local",
     },
     "embedding.apiKey": {
       label: "OpenAI API Key",
