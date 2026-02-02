@@ -18,6 +18,7 @@ async function loadLlamaCpp(): Promise<LlamaCppModule> {
   return llamaCppPromise;
 }
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { stringEnum } from "openclaw/plugin-sdk";
@@ -274,11 +275,39 @@ const memoryPlugin = {
     let embeddings: EmbeddingProvider;
 
     if (cfg.embedding.provider === "local") {
-        // Prefer explicit modelPath. If omitted, assume a conventional location.
-        // NOTE: OpenClaw resolves `~` and workspace-relative paths via api.resolvePath.
-        const defaultLocalPath = `~/.openclaw/models/embeddings/${cfg.embedding.model!}`;
-        const finalModelPath = cfg.embedding.modelPath || defaultLocalPath;
-        embeddings = new LocalEmbeddings(api.resolvePath(finalModelPath));
+        // Prefer explicit modelPath. If omitted, try:
+        // 1) global agents.defaults.memorySearch.local.modelPath (common in OpenClaw setups)
+        // 2) ~/.openclaw/models/embeddings/<model>
+        const configuredModelPath = cfg.embedding.modelPath
+          ? api.resolvePath(cfg.embedding.modelPath)
+          : undefined;
+
+        const globalModelPath = (() => {
+          const p = (api.config as any)?.agents?.defaults?.memorySearch?.local?.modelPath;
+          return typeof p === "string" ? api.resolvePath(p) : undefined;
+        })();
+
+        const conventionalPath = api.resolvePath(
+          `~/.openclaw/models/embeddings/${cfg.embedding.model!}`,
+        );
+
+        const candidates = [configuredModelPath, globalModelPath, conventionalPath].filter(
+          (p): p is string => typeof p === "string" && p.length > 0,
+        );
+
+        const chosenPath = candidates.find((p) => {
+          try {
+            return fs.existsSync(p);
+          } catch {
+            return false;
+          }
+        }) ?? candidates[0];
+
+        if (!chosenPath) {
+          throw new Error("No local embedding model path could be resolved");
+        }
+
+        embeddings = new LocalEmbeddings(chosenPath);
     } else {
         embeddings = new OpenAIEmbeddings(cfg.embedding.apiKey!, cfg.embedding.model!);
     }
