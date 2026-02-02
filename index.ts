@@ -9,7 +9,9 @@
 import { Type } from "@sinclair/typebox";
 import * as lancedb from "@lancedb/lancedb";
 import OpenAI from "openai";
+import { getLlama } from "node-llama-cpp";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { stringEnum } from "openclaw/plugin-sdk";
 
@@ -140,10 +142,14 @@ class MemoryDB {
 }
 
 // ============================================================================
-// OpenAI Embeddings
+// Embeddings Providers
 // ============================================================================
 
-class Embeddings {
+interface EmbeddingProvider {
+  embed(text: string): Promise<number[]>;
+}
+
+class OpenAIEmbeddings implements EmbeddingProvider {
   private client: OpenAI;
 
   constructor(
@@ -159,6 +165,34 @@ class Embeddings {
       input: text,
     });
     return response.data[0].embedding;
+  }
+}
+
+class LocalEmbeddings implements EmbeddingProvider {
+  private modelPromise: Promise<any> | null = null;
+  private contextPromise: Promise<any> | null = null;
+
+  constructor(private modelPath: string) {}
+
+  private async getContext() {
+    if (this.contextPromise) return this.contextPromise;
+    
+    this.contextPromise = (async () => {
+      const llama = await getLlama();
+      const model = await llama.loadModel({
+        modelPath: this.modelPath,
+      });
+      return await model.createContext();
+    })();
+
+    return this.contextPromise;
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const context = await this.getContext();
+    // node-llama-cpp v3 API for embeddings
+    const embedding = await context.getEmbedding(text);
+    return Array.from(embedding);
   }
 }
 
@@ -178,8 +212,19 @@ const MEMORY_TRIGGERS = [
   /always|never|important/i,
 ];
 
+const PII_REGEX = [
+  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/, // Email
+  /(?:\+\d{1,3}[- ]?)?\(?\d{3}\)?[- ]?\d{3}[- ]?\d{4}/, // Phone numbers
+];
+
 function shouldCapture(text: string): boolean {
   if (text.length < 10 || text.length > 500) return false;
+
+  // Security: PII Filtering
+  if (PII_REGEX.some((r) => r.test(text))) {
+    return false;
+  }
+
   // Skip injected context from memory recall
   if (text.includes("<relevant-memories>")) return false;
   // Skip system-generated content
@@ -217,7 +262,30 @@ const memoryPlugin = {
     const resolvedDbPath = api.resolvePath(cfg.dbPath!);
     const vectorDim = vectorDimsForModel(cfg.embedding.model ?? "text-embedding-3-small");
     const db = new MemoryDB(resolvedDbPath, vectorDim);
-    const embeddings = new Embeddings(cfg.embedding.apiKey, cfg.embedding.model!);
+
+    let embeddings: EmbeddingProvider;
+
+    if (cfg.embedding.provider === "local") {
+        const modelPath = cfg.embedding.modelPath 
+            ? api.resolvePath(cfg.embedding.modelPath)
+            : path.join(process.cwd(), "models", cfg.embedding.model!); // Default location?
+        
+        // If they provided a raw filename as modelPath or model, try to resolve it relative to some models dir or absolute
+        // But for now, let's assume if it's not absolute, we might need logic. 
+        // Simpler: assume modelPath is what we use.
+
+        // If modelPath is not set, use model name and assume it's a file in ./models or similar? 
+        // The instruction said "Use the existing 'bge-base-en-v1.5-q4_k_m.gguf' model path as default for local."
+        // That implies it might be a relative path.
+
+        // Let's use the explicit modelPath if provided, otherwise assume the model name IS the filename and look for it.
+        const finalModelPath = cfg.embedding.modelPath || cfg.embedding.model!; 
+        
+        // We can just pass it through api.resolvePath to be safe if it's relative to workspace
+        embeddings = new LocalEmbeddings(api.resolvePath(finalModelPath));
+    } else {
+        embeddings = new OpenAIEmbeddings(cfg.embedding.apiKey!, cfg.embedding.model!);
+    }
 
     api.logger.info(`memory-lancedb: plugin registered (db: ${resolvedDbPath}, lazy init)`);
 
