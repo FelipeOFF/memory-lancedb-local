@@ -177,31 +177,28 @@ class OpenAIEmbeddings implements EmbeddingProvider {
 }
 
 class LocalEmbeddings implements EmbeddingProvider {
-  private modelPromise: Promise<any> | null = null;
-  private contextPromise: Promise<any> | null = null;
+  private embeddingContextPromise: Promise<any> | null = null;
 
   constructor(private modelPath: string) {}
 
-  private async getContext() {
-    if (this.contextPromise) return this.contextPromise;
-    
-    this.contextPromise = (async () => {
+  private async getEmbeddingContext() {
+    if (this.embeddingContextPromise) return this.embeddingContextPromise;
+
+    this.embeddingContextPromise = (async () => {
       const { getLlama } = await loadLlamaCpp();
       const llama = await getLlama();
-      const model = await llama.loadModel({
-        modelPath: this.modelPath,
-      });
-      return await model.createContext();
+      const model = await llama.loadModel({ modelPath: this.modelPath });
+      // node-llama-cpp v3+: embeddings use `createEmbeddingContext`.
+      return await model.createEmbeddingContext();
     })();
 
-    return this.contextPromise;
+    return this.embeddingContextPromise;
   }
 
   async embed(text: string): Promise<number[]> {
-    const context = await this.getContext();
-    // node-llama-cpp v3 API for embeddings
-    const embedding = await context.getEmbedding(text);
-    return Array.from(embedding);
+    const ctx = await this.getEmbeddingContext();
+    const embedding = await ctx.getEmbeddingFor(text);
+    return Array.from(embedding.vector);
   }
 }
 
