@@ -9,7 +9,14 @@
 import { Type } from "@sinclair/typebox";
 import * as lancedb from "@lancedb/lancedb";
 import OpenAI from "openai";
-import { getLlama } from "node-llama-cpp";
+// NOTE: `node-llama-cpp` is ESM-only; load it dynamically so the plugin can
+// run under OpenClaw's runtime loader (jiti) without top-level await issues.
+type LlamaCppModule = typeof import("node-llama-cpp");
+let llamaCppPromise: Promise<LlamaCppModule> | null = null;
+async function loadLlamaCpp(): Promise<LlamaCppModule> {
+  if (!llamaCppPromise) llamaCppPromise = import("node-llama-cpp");
+  return llamaCppPromise;
+}
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
@@ -178,6 +185,7 @@ class LocalEmbeddings implements EmbeddingProvider {
     if (this.contextPromise) return this.contextPromise;
     
     this.contextPromise = (async () => {
+      const { getLlama } = await loadLlamaCpp();
       const llama = await getLlama();
       const model = await llama.loadModel({
         modelPath: this.modelPath,
