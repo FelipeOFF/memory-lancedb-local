@@ -19,7 +19,7 @@ export const MEMORY_CATEGORIES = ["preference", "fact", "decision", "entity", "o
 export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
 
 const DEFAULT_MODEL = "text-embedding-3-small";
-const DEFAULT_LOCAL_MODEL = "bge-base-en-v1.5-q4_k_m.gguf";
+const DEFAULT_LOCAL_MODEL = "bge-m3-Q8_0.gguf";
 const LEGACY_STATE_DIRS: string[] = [];
 
 function resolveDefaultDbPath(): string {
@@ -49,6 +49,7 @@ const EMBEDDING_DIMENSIONS: Record<string, number> = {
   "text-embedding-3-small": 1536,
   "text-embedding-3-large": 3072,
   "bge-base-en-v1.5-q4_k_m.gguf": 768,
+  "bge-m3-Q8_0.gguf": 1024,
 };
 
 function assertAllowedKeys(value: Record<string, unknown>, allowed: string[], label: string) {

@@ -193,8 +193,8 @@ class LocalEmbeddings implements EmbeddingProvider {
     if (this.embeddingContextPromise) return this.embeddingContextPromise;
 
     this.embeddingContextPromise = (async () => {
-      const { getLlama } = await loadLlamaCpp();
-      const llama = await getLlama();
+      const { getLlama, LlamaLogLevel } = await loadLlamaCpp();
+      const llama = await getLlama({ logLevel: LlamaLogLevel.error });
       const model = await llama.loadModel({ modelPath: this.modelPath });
       // node-llama-cpp v3+: embeddings use `createEmbeddingContext`.
       return await model.createEmbeddingContext();
