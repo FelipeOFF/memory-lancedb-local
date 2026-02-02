@@ -157,6 +157,14 @@ interface EmbeddingProvider {
   embed(text: string): Promise<number[]>;
 }
 
+function normalizeVector(vector: number[]): number[] {
+  let sumSq = 0;
+  for (const v of vector) sumSq += v * v;
+  const norm = Math.sqrt(sumSq);
+  if (!isFinite(norm) || norm <= 0) return vector;
+  return vector.map((v) => v / norm);
+}
+
 class OpenAIEmbeddings implements EmbeddingProvider {
   private client: OpenAI;
 
@@ -172,7 +180,7 @@ class OpenAIEmbeddings implements EmbeddingProvider {
       model: this.model,
       input: text,
     });
-    return response.data[0].embedding;
+    return normalizeVector(response.data[0].embedding);
   }
 }
 
@@ -198,7 +206,7 @@ class LocalEmbeddings implements EmbeddingProvider {
   async embed(text: string): Promise<number[]> {
     const ctx = await this.getEmbeddingContext();
     const embedding = await ctx.getEmbeddingFor(text);
-    return Array.from(embedding.vector);
+    return normalizeVector(Array.from(embedding.vector));
   }
 }
 
